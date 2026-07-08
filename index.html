@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spectrum Warfare — Jamming vs Anti-Jamming Simulator</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark">SPECTRUM WARFARE</span>
+      <span class="sub">AI jammer vs AI anti-jammer — live RF simulation</span>
+    </div>
+    <div class="header-status">
+      <div class="clock" id="simClock">00:00.0</div>
+      <div>SIM STEP <span id="simStep">0</span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="control-group">
+      <button id="btnStart" class="primary">▶ Start</button>
+      <button id="btnPause">⏸ Pause</button>
+      <button id="btnReset">⟲ Reset</button>
+    </div>
+
+    <div class="control-group">
+      <span class="label">Protocol</span>
+      <div class="segmented">
+        <button id="protoWifi" class="active" data-proto="WIFI">Wi-Fi · 13ch</button>
+        <button id="protoBt" data-proto="BLUETOOTH">Bluetooth · 79ch</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <span class="label">Speed</span>
+      <input type="range" id="speedSlider" min="1" max="6" step="1" value="3" />
+      <span class="speed-value" id="speedValue">1.5x</span>
+    </div>
+
+    <div class="control-group">
+      <span class="label">Jammer override</span>
+      <div class="override-buttons" id="overrideButtons">
+        <button data-mode="AUTO" class="active">Auto</button>
+        <button data-mode="NO_JAMMING">None</button>
+        <button data-mode="SPOT_JAMMING">Spot</button>
+        <button data-mode="SWEEP_JAMMING">Sweep</button>
+        <button data-mode="BARRAGE_JAMMING">Barrage</button>
+        <button data-mode="REACTIVE_JAMMING">Reactive</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="arena">
+    <section class="panel jam">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot"></span>Jammer Agent</div>
+        <div class="status-readout">
+          <div class="status-label">Technique detected</div>
+          <div class="status-value" id="jamModeLabel">NO_JAMMING</div>
+        </div>
+      </div>
+
+      <canvas class="spectrum" id="jamSpectrum"></canvas>
+
+      <div class="chart-wrap">
+        <canvas class="chart" id="jamChart"></canvas>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="k">Packets attempted</div><div class="v" id="jamAttempted">0</div></div>
+        <div class="stat"><div class="k">Packets blocked</div><div class="v" id="jamBlocked">0</div></div>
+        <div class="stat"><div class="k">Block rate</div><div class="v" id="jamBlockRate">0%</div></div>
+      </div>
+    </section>
+
+    <section class="panel anti">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot"></span>Anti-Jammer Agent</div>
+        <div class="status-readout">
+          <div class="status-label">Countermeasure deployed</div>
+          <div class="status-value" id="antiModeLabel">NORMAL_OPERATION</div>
+        </div>
+      </div>
+
+      <canvas class="spectrum" id="antiSpectrum"></canvas>
+
+      <div class="chart-wrap">
+        <canvas class="chart" id="antiChart"></canvas>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="k">Packets received</div><div class="v" id="antiReceived">0</div></div>
+        <div class="stat"><div class="k">Active channel</div><div class="v" id="antiChannel">—</div></div>
+        <div class="stat"><div class="k">Delivery rate</div><div class="v" id="antiPdr">0%</div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="meter-panel">
+    <div class="meter-head">
+      <span>Signal advantage</span>
+      <span id="meterReadout">EVEN</span>
+    </div>
+    <div class="meter-track">
+      <div class="meter-center-line"></div>
+      <div class="meter-fill-jam" id="meterFillJam" style="width:0%"></div>
+      <div class="meter-fill-anti" id="meterFillAnti" style="width:0%"></div>
+      <div class="meter-marker" id="meterMarker" style="left:50%"></div>
+    </div>
+    <div class="meter-labels">
+      <span class="jside">◀ JAMMER WINNING</span>
+      <span class="aside">ANTI-JAMMER WINNING ▶</span>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-head">Battle log</div>
+    <div class="log-body" id="battleLog"></div>
+  </div>
+
+  <footer class="note">
+    Synthetic simulation only — spectrum energy, SINR, and packet delivery are modeled with heuristics, not captured from real RF hardware.
+  </footer>
+
+</div>
+
+<script src="simulator.js"></script>
+</body>
+</html>
