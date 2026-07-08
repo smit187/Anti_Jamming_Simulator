@@ -369,43 +369,13 @@
     battleLog: el("battleLog"),
   };
 
-  /* ------------------------------ Charts ---------------------------------- */
-
-  let jamChart, antiChart;
-
-  function makeChart(canvas, datasets) {
-    return new Chart(canvas.getContext("2d"), {
-      type: "line",
-      data: { labels: [], datasets },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { intersect: false },
-        scales: {
-          x: { display: false },
-          y: {
-            beginAtZero: true,
-            grid: { color: "#17212b" },
-            ticks: { color: "#7c8a97", font: { size: 10 } },
-          },
-        },
-        plugins: { legend: { labels: { color: "#7c8a97", font: { size: 10 } }, boxWidth: 12 } },
-        elements: { point: { radius: 0 }, line: { tension: 0.25, borderWidth: 2 } },
-      },
-    });
-  }
+  /* ------------------------------ Charts -----------------------------------
+     Plain-canvas line charts. No external library, no CDN, no network
+     dependency — these draw directly with the 2D context, the same way
+     drawSpectrum() below does. */
 
   function initCharts() {
-    jamChart = makeChart(dom.jamChart, [
-      { label: "Interference energy", data: [], borderColor: "#ff4b5c", backgroundColor: "rgba(255,75,92,0.12)", fill: true },
-      { label: "Packets blocked", data: [], borderColor: "#f5a623", backgroundColor: "transparent" },
-    ]);
-
-    antiChart = makeChart(dom.antiChart, [
-      { label: "Sent", data: [], borderColor: "#4d5964", backgroundColor: "transparent", borderDash: [4, 3] },
-      { label: "Received", data: [], borderColor: "#2fd9c4", backgroundColor: "rgba(47,217,196,0.12)", fill: true },
-    ]);
+    // Nothing to set up ahead of time; canvases are sized/drawn on demand.
   }
 
   function pushSeries(arr, val) {
@@ -413,17 +383,96 @@
     if (arr.length > HISTORY_LEN) arr.shift();
   }
 
-  function updateCharts() {
-    const labels = state.seriesLabels;
-    jamChart.data.labels = labels;
-    jamChart.data.datasets[0].data = state.jamNoiseSeries;
-    jamChart.data.datasets[1].data = state.jamBlockedSeries;
-    jamChart.update();
+  function drawLineChart(canvas, series) {
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || canvas.parentElement.clientWidth || 300;
+    const h = canvas.clientHeight || 120;
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
 
-    antiChart.data.labels = labels;
-    antiChart.data.datasets[0].data = state.sentSeries;
-    antiChart.data.datasets[1].data = state.receivedSeries;
-    antiChart.update();
+    const padTop = 6, padBottom = 6;
+    const plotH = h - padTop - padBottom;
+
+    let maxVal = 10;
+    for (const s of series) {
+      for (const v of s.data) if (v > maxVal) maxVal = v;
+    }
+    maxVal *= 1.15;
+
+    // gridlines
+    ctx.strokeStyle = "#17212b";
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 2; g++) {
+      const y = padTop + (plotH * g) / 2;
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(w, y + 0.5);
+      ctx.stroke();
+    }
+
+    for (const s of series) {
+      const data = s.data;
+      if (data.length < 2) continue;
+      const stepX = w / (HISTORY_LEN - 1);
+      const startX = w - (data.length - 1) * stepX;
+
+      const pointAt = (i) => {
+        const x = startX + i * stepX;
+        const ratio = Math.min(1, Math.max(0, data[i] / maxVal));
+        const y = padTop + plotH - ratio * plotH;
+        return [x, y];
+      };
+
+      if (s.fill) {
+        ctx.beginPath();
+        const [x0, y0] = pointAt(0);
+        ctx.moveTo(x0, h - padBottom);
+        ctx.lineTo(x0, y0);
+        for (let i = 1; i < data.length; i++) {
+          const [x, y] = pointAt(i);
+          ctx.lineTo(x, y);
+        }
+        const [xLast] = pointAt(data.length - 1);
+        ctx.lineTo(xLast, h - padBottom);
+        ctx.closePath();
+        ctx.fillStyle = s.fillColor || s.color;
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.setLineDash(s.dashed ? [4, 3] : []);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = s.color;
+      const [x0, y0] = pointAt(0);
+      ctx.moveTo(x0, y0);
+      for (let i = 1; i < data.length; i++) {
+        const [x, y] = pointAt(i);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+  }
+
+  function updateCharts() {
+    drawLineChart(dom.jamChart, [
+      { data: state.jamNoiseSeries, color: "#ff4b5c", fillColor: "rgba(255,75,92,0.14)", fill: true },
+      { data: state.jamBlockedSeries, color: "#f5a623" },
+    ]);
+
+    drawLineChart(dom.antiChart, [
+      { data: state.sentSeries, color: "#4d5964", dashed: true },
+      { data: state.receivedSeries, color: "#2fd9c4", fillColor: "rgba(47,217,196,0.14)", fill: true },
+    ]);
   }
 
   /* --------------------------- Spectrum rendering -------------------------- */
@@ -691,11 +740,17 @@
   /* -------------------------------- Boot ----------------------------------- */
 
   function boot() {
-    initCharts();
+    // Wire the controls FIRST. If anything below throws, Start/Pause/Reset
+    // and the override buttons still respond instead of going dead.
     wireControls();
-    // initialize speed label to match default slider value
-    dom.speedSlider.dispatchEvent(new Event("input"));
-    resetSimulation();
+    try {
+      initCharts();
+      dom.speedSlider.dispatchEvent(new Event("input"));
+      resetSimulation();
+    } catch (err) {
+      console.error("Spectrum Warfare failed to fully initialize:", err);
+      logLine("sys", `⚠ Startup warning: ${String(err.message || err)} — controls should still work.`);
+    }
   }
 
   document.addEventListener("DOMContentLoaded", boot);
